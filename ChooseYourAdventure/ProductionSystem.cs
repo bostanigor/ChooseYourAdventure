@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,6 +12,7 @@ namespace ChooseYourAdventure
     {
         private Dictionary<int, Fact> _idToFacts;
         private Dictionary<string, Fact> _descToFacts;
+        private Dictionary<Fact, List<Rule>> _factToRules;
         private List<Fact> _facts;
         private List<Rule> _rules;
         public ProductionSystem(string factsPath, string rulesPath)
@@ -62,10 +64,12 @@ namespace ChooseYourAdventure
             stateQueue.Enqueue(startState);
 
             FactState result = null;
+            var stopwatch = new Stopwatch();
+            stopwatch.Start();
             while (stateQueue.Count != 0 && result == null)
             {
                 var state = stateQueue.Dequeue();
-                foreach (var rule in new HashSet<Rule>(state.AvailableRules))
+                foreach (var rule in state.AvailableRules)
                 {
                     var newState = state.ApplyRule(rule);
                     if (newState != null && !stateSet.Contains(newState))
@@ -80,6 +84,8 @@ namespace ChooseYourAdventure
                     }
                 }
             }
+
+            stopwatch.Stop();
             if (result == null)
                 Console.WriteLine("NOT REACHABLE");
             else
@@ -92,11 +98,27 @@ namespace ChooseYourAdventure
                     node = node.GetParent();
                 }
             }
+            Console.WriteLine($"Elapsed time is {stopwatch.ElapsedMilliseconds / 1000.0} seconds");
         }
 
         public void BackwardSearch(string[] startFacts, string[] endFacts)
         {
-            
+            var factNodes = endFacts.Select(desc =>
+                new BackwardNode(_descToFacts[desc], null, null)).ToList();
+            var queue = new Queue<BackwardNode>();
+            factNodes.ForEach(fact => queue.Enqueue(fact));
+            while (queue.Count != 0)
+            {
+                var node = queue.Dequeue();
+                if (node.Fact != null) // This is 'OR' node
+                {
+                    
+                }
+                else // This is 'And' node
+                {
+                    
+                }
+            }
         }
 
         public void ForwardSearchSandbox(string[] startFacts)
@@ -137,108 +159,8 @@ namespace ChooseYourAdventure
             for (var i = 0; i < state.Length; i++)
                 if (state[i])
                     sB.Append($"{_facts[i].Desc}, ");
+            sB.Remove(sB.Length - 2, 2);
             return sB.ToString();
-        }
-    }
-
-    public class FactState
-    {
-        private FactState _parent;
-        private bool[] _state;
-        private Rule _rule;
-        
-        public HashSet<Rule> AvailableRules { get; set; }
-
-        public FactState(bool[] state, FactState parent, Rule rule, HashSet<Rule> availableRules)
-        {
-            _parent = parent;
-            _state = state;
-            _rule = rule;
-            AvailableRules = availableRules;
-        }
-
-        public FactState ApplyRule(Rule rule)
-        {
-            var newFact = rule.Apply(_state);
-            if (newFact != null)
-            {
-                AvailableRules.Remove(rule);
-                var newState = new bool[_state.Length];
-                _state.CopyTo(newState, 0);
-                newState[newFact.Id] = true;
-                return new FactState(newState, this, rule, AvailableRules);
-            }
-            return null;
-        }
-
-        public bool ContainsFactsIds(int[] ids)
-        {
-            foreach (var id in ids)
-                if (_state[id] == false)
-                    return false;
-            return true;
-        }
-
-        public bool Equals(FactState other)
-        {
-            for (int i = 0; i < _state.Length; i++)
-                if (this._state[i] != other._state[i])
-                    return false;
-            return true;
-        }
-
-        public bool[] GetState() => _state;
-        public FactState GetParent() => _parent;
-        public Rule GetRule() => _rule;
-    }
-
-    public class FactStateComparer : IEqualityComparer<FactState>
-    {
-        public bool Equals(FactState x, FactState y) =>
-            x.Equals(y);
-
-        public int GetHashCode(FactState item) =>
-            item.GetState().GetHashCode();
-    }
-
-    public class Rule
-    {
-        private Fact[] _antecedents;
-        private Fact _consequent;
-
-        public Rule(Fact[] antecedents, Fact consequent)
-        {
-            _antecedents = antecedents;
-            _consequent = consequent;
-        }
-
-        public override string ToString()
-        {
-            var sB = new StringBuilder();
-            foreach (var a in _antecedents)
-                sB.Append($"{a.Desc}, ");
-            sB.Append($"-> {_consequent.Desc}");
-            return sB.ToString();
-        }
-
-        public Fact Apply(bool[] state)
-        {
-            foreach (var a in _antecedents)
-                if (state[a.Id] == false)
-                    return null;
-            return _consequent;
-        }
-    }
-
-    public class Fact
-    {
-        public int Id { get; private set; }
-        public string Desc { get; private set; }
-
-        public Fact(int id, string desc)
-        {
-            Id = id;
-            Desc = desc;
         }
     }
 }
