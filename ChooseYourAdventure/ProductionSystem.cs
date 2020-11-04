@@ -10,15 +10,14 @@ namespace ChooseYourAdventure
 {
     public class ProductionSystem
     {
-        private Dictionary<int, Fact> _idToFacts;
         private Dictionary<string, Fact> _descToFacts;
-        private Dictionary<Fact, List<Rule>> _factToRules;
         private List<Fact> _facts;
         private List<Rule> _rules;
+        private List<List<Rule>> _factIdToRules;        
         public ProductionSystem(string factsPath, string rulesPath)
         {
-            _idToFacts = new Dictionary<int, Fact>();
             _descToFacts = new Dictionary<string, Fact>();
+            _factIdToRules = new List<List<Rule>>();
             _rules = new List<Rule>();
             _facts = new List<Fact>();
 
@@ -28,12 +27,13 @@ namespace ChooseYourAdventure
                 while (sr.Peek() >= 0)
                 {
                     var fact = new Fact(i++, sr.ReadLine());
-                    _idToFacts[fact.Id] = fact;
                     _descToFacts[fact.Desc] = fact;
                     _facts.Add(fact);
+                    _factIdToRules.Add(new List<Rule>());
                 }
             }
             using (StreamReader sr = new StreamReader(rulesPath)) {
+                int i = 0;
                 while (sr.Peek() >= 0)
                 {
                     var line = sr.ReadLine();
@@ -42,81 +42,111 @@ namespace ChooseYourAdventure
                     var right = temp[1].Trim();
                     var antecdents = left.Split(',').Select(str => _descToFacts[str.Trim()]);
                     var consequent = _descToFacts[right];
-                    _rules.Add(new Rule(antecdents.ToArray(), consequent));
+                    var rule = new Rule(i++, antecdents.ToArray(), consequent);
+                    _rules.Add(rule);
+                    _factIdToRules[consequent.Id].Add(rule);
                 }
             }
 
             //_rules.ForEach(rule => Console.WriteLine(rule));
         }
-
-        public void ForwardSearch(string[] startFacts, string[] endFacts)
+        
+        public void BackwardSearch(string[] startFacts, string[] endFacts)
         {
-            var endFactsIds = endFacts.Select(desc => _descToFacts[desc].Id).ToArray(); 
-            var startBoolState = new bool[_facts.Count];
-            Array.ForEach(startFacts, desc => startBoolState[_descToFacts[desc].Id] = true);
-            var startRuleSet = new HashSet<Rule>(_rules);
-            var startState = new FactState(startBoolState, null, null, startRuleSet);
+            var endNodes = endFacts.Select(desc =>
+                new BackwardNode(_descToFacts[desc], null, null)).ToList();
+            var factNodes = new BackwardNode[_facts.Count]; // Fact nodes that we already processed
+            var ruleNodes = new BackwardNode[_rules.Count]; // Rule nodes that we already processed
+            var ruleTraceback = new List<BackwardNode>();
+            var queue = new Queue<BackwardNode>();
             
-            var stateSet = new HashSet<FactState>(new FactStateComparer());
-            stateSet.Add(startState);
+            foreach (var desc in startFacts)
+                factNodes[_descToFacts[desc].Id] = new BackwardNode(_descToFacts[desc],
+                    null, new List<BackwardNode>(), 0);
             
-            var stateQueue = new Queue<FactState>();
-            stateQueue.Enqueue(startState);
-
-            FactState result = null;
-            var stopwatch = new Stopwatch();
-            stopwatch.Start();
-            while (stateQueue.Count != 0 && result == null)
+            var tempRule = new Rule(-1,
+                endFacts.Select(desc => _descToFacts[desc]).ToArray(), null);
+            var firstNode = new BackwardNode(null, tempRule, new List<BackwardNode>(),
+                tempRule.Antecedents.Length);
+            queue.Enqueue(firstNode);
+            
+            while (queue.Count != 0 && firstNode.UnsuccessfulChildrenCount != 0)
             {
-                var state = stateQueue.Dequeue();
-                foreach (var rule in state.AvailableRules)
+                var node = queue.Dequeue();
+                if (node.Fact != null) // This is 'OR' Fact node
                 {
-                    var newState = state.ApplyRule(rule);
-                    if (newState != null && !stateSet.Contains(newState))
-                    {
-                        if (newState.ContainsFactsIds(endFactsIds)) {
-                            result = newState;
-                            break;
-                        }
+                    // If fact is Successful
+                    if (node.UnsuccessfulChildrenCount <= 0) {
+                        RiseToRoot(node); // Temporary
+                        continue;
+                    }
 
-                        stateSet.Add(newState);
-                        stateQueue.Enqueue(newState);
+                    var applicableRules = _factIdToRules[node.Fact.Id];
+                    node.UnsuccessfulChildrenCount = 1; // I need only one children to succeed
+                    foreach (var rule in applicableRules)
+                    {
+                        if (ruleNodes[rule.Id] != null)
+                            continue;
+                        var newNode = new BackwardNode(null, rule, 
+                            new List<BackwardNode>(){ node },
+                            rule.Antecedents.Length);
+                        ruleNodes[rule.Id] = newNode;
+                        queue.Enqueue(newNode);
+                    }
+                }
+                else // This is 'AND' Rule node
+                {
+                    foreach (var fact in node.Rule.Antecedents)
+                    {
+                        // Check if fact was processed
+                        var factNode = factNodes[fact.Id];
+                        if (factNode != null)
+                        {
+                            factNode.Parents.Add(node);
+                            if (factNode.UnsuccessfulChildrenCount == 0)
+                                node.UnsuccessfulChildrenCount--;
+                            continue;
+                        }
+                        var newNode = new BackwardNode(fact, null,
+                            new List<BackwardNode>() { node }, 1);
+                        factNodes[fact.Id] = newNode;
+                        queue.Enqueue(newNode);
+                    }
+                    // If all children were already successful
+                    if (node.UnsuccessfulChildrenCount <= 0)
+                    {
+                        RiseToRoot(node);
+                        ruleTraceback.Add(node);
                     }
                 }
             }
 
-            stopwatch.Stop();
-            if (result == null)
-                Console.WriteLine("NOT REACHABLE");
-            else
+            if (firstNode.UnsuccessfulChildrenCount == 0)
             {
-                var node = result;
-                while (node != null)
-                {
-                    Console.WriteLine(StateToString(node.GetState()));
-                    Console.WriteLine($"  {node.GetRule()}");
-                    node = node.GetParent();
-                }
+                Console.WriteLine("Success");
+                // ruleTraceback.Reverse();
+                // foreach (var ruleNode in ruleTraceback)
+                // {
+                //     if (rule)
+                // }
             }
-            Console.WriteLine($"Elapsed time is {stopwatch.ElapsedMilliseconds / 1000.0} seconds");
+            else
+                Console.WriteLine("Unsuccess");
         }
 
-        public void BackwardSearch(string[] startFacts, string[] endFacts)
+        private void RiseToRoot(BackwardNode node)
         {
-            var factNodes = endFacts.Select(desc =>
-                new BackwardNode(_descToFacts[desc], null, null)).ToList();
-            var queue = new Queue<BackwardNode>();
-            factNodes.ForEach(fact => queue.Enqueue(fact));
-            while (queue.Count != 0)
+            if (node == null)
+                return;
+            foreach (var parent in node.Parents)
             {
-                var node = queue.Dequeue();
-                if (node.Fact != null) // This is 'OR' node
+                if (parent == node)
+                    return;
+                if (parent.UnsuccessfulChildrenCount > 0)
                 {
-                    
-                }
-                else // This is 'And' node
-                {
-                    
+                    parent.UnsuccessfulChildrenCount--;
+                    if (parent.UnsuccessfulChildrenCount == 0)
+                        RiseToRoot(parent);                    
                 }
             }
         }
@@ -149,7 +179,7 @@ namespace ChooseYourAdventure
             var result = new List<Fact>();
             for (int i = 0; i < state.Length; i++)
                 if (state[i] == true)
-                    result.Add(_idToFacts[i]);
+                    result.Add(_facts[i]);
             result.ForEach(fact => Console.WriteLine(fact.Desc));
         }
 

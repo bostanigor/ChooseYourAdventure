@@ -11,9 +11,13 @@ namespace ChooseYourAdventure
             var factsPath = "../../facts.txt";
             var rulesPath = "../../rulesBase.txt";
             var prodSystem = new ProductionSystem(factsPath, rulesPath);
-            prodSystem.ForwardSearch(
-                new string[] { "Оружие", "Щит", "Карта", "Удача", "Вода" },
-                new string[] { "Вино"});
+            // prodSystem.BackwardSearch(
+            //     new string[] { "Оружие", "Щит", "Карта", "Удача", "Вода" },
+            //     new string[] { "Темный лес"});
+            
+            prodSystem.BackwardSearch(
+                new string[] { "Оружие", "Щит", "Удача", "Вода" },
+                new string[] { "Темный лес"});
             
             // prodSystem.ForwardSearchSandbox(
             //     new string[] { "Оружие", "Щит", "Карта" });
