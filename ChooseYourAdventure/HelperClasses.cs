@@ -6,29 +6,28 @@ namespace ChooseYourAdventure
     public class BackwardNode
     {
         public List<BackwardNode> Parents { get; private set; }
+        public List<BackwardNode> Children { get; private set; }
         public Fact Fact { get; private set; }
         public Rule Rule { get; private set; }
 
+        public int Depth { get; set; }
         public int UnsuccessfulChildrenCount { get; set; }
 
         public BackwardNode(Fact fact, Rule rule, List<BackwardNode> parents,
+            int depth,
             int unsuccessfulChildrenCount = 0)
         {
             Fact = fact;
             Rule = rule;
             Parents = parents;
+            Depth = depth;
             UnsuccessfulChildrenCount = unsuccessfulChildrenCount;
+            Children = new List<BackwardNode>();
         }
-    }
-    // public class FactStateComparer : IEqualityComparer<FactState>
-    // {
-    //     public bool Equals(FactState x, FactState y) =>
-    //         x.Equals(y);
-    //
-    //     public int GetHashCode(FactState item) =>
-    //         item.GetState().GetHashCode();
-    // }
 
+        public void AddChild(BackwardNode node) =>
+            Children.Add(node);
+    }
     public class Rule
     {
         public int Id { get; private set; }

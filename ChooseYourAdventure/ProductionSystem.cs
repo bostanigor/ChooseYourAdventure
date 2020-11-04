@@ -54,20 +54,20 @@ namespace ChooseYourAdventure
         public void BackwardSearch(string[] startFacts, string[] endFacts)
         {
             var endNodes = endFacts.Select(desc =>
-                new BackwardNode(_descToFacts[desc], null, null)).ToList();
+                new BackwardNode(_descToFacts[desc], null, null, 0)).ToList();
             var factNodes = new BackwardNode[_facts.Count]; // Fact nodes that we already processed
             var ruleNodes = new BackwardNode[_rules.Count]; // Rule nodes that we already processed
-            var ruleTraceback = new List<BackwardNode>();
+            var ruleTraceback = new LinkedList<BackwardNode>();
             var queue = new Queue<BackwardNode>();
             
             foreach (var desc in startFacts)
                 factNodes[_descToFacts[desc].Id] = new BackwardNode(_descToFacts[desc],
-                    null, new List<BackwardNode>(), 0);
+                    null, new List<BackwardNode>(), 0, 0);
             
             var tempRule = new Rule(-1,
                 endFacts.Select(desc => _descToFacts[desc]).ToArray(), null);
             var firstNode = new BackwardNode(null, tempRule, new List<BackwardNode>(),
-                tempRule.Antecedents.Length);
+                Int32.MinValue, tempRule.Antecedents.Length);
             queue.Enqueue(firstNode);
             
             while (queue.Count != 0 && firstNode.UnsuccessfulChildrenCount != 0)
@@ -77,7 +77,7 @@ namespace ChooseYourAdventure
                 {
                     // If fact is Successful
                     if (node.UnsuccessfulChildrenCount <= 0) {
-                        RiseToRoot(node); // Temporary
+                        RiseToRoot(node);
                         continue;
                     }
 
@@ -86,11 +86,16 @@ namespace ChooseYourAdventure
                     foreach (var rule in applicableRules)
                     {
                         if (ruleNodes[rule.Id] != null)
+                        {
+                            node.AddChild(ruleNodes[rule.Id]);
                             continue;
+                        }
+                            
                         var newNode = new BackwardNode(null, rule, 
                             new List<BackwardNode>(){ node },
-                            rule.Antecedents.Length);
+                            int.MaxValue, rule.Antecedents.Length);
                         ruleNodes[rule.Id] = newNode;
+                        node.AddChild(newNode);
                         queue.Enqueue(newNode);
                     }
                 }
@@ -103,51 +108,65 @@ namespace ChooseYourAdventure
                         if (factNode != null)
                         {
                             factNode.Parents.Add(node);
+                            node.AddChild(factNode);
                             if (factNode.UnsuccessfulChildrenCount == 0)
                                 node.UnsuccessfulChildrenCount--;
                             continue;
                         }
                         var newNode = new BackwardNode(fact, null,
-                            new List<BackwardNode>() { node }, 1);
+                            new List<BackwardNode>() { node },
+                            int.MinValue, 1);
                         factNodes[fact.Id] = newNode;
+                        node.AddChild(newNode);
                         queue.Enqueue(newNode);
                     }
                     // If all children were already successful
-                    if (node.UnsuccessfulChildrenCount <= 0)
-                    {
+                    if (node.UnsuccessfulChildrenCount <= 0) {
                         RiseToRoot(node);
-                        ruleTraceback.Add(node);
                     }
                 }
             }
 
             if (firstNode.UnsuccessfulChildrenCount == 0)
             {
-                Console.WriteLine("Success");
-                // ruleTraceback.Reverse();
-                // foreach (var ruleNode in ruleTraceback)
-                // {
-                //     if (rule)
-                // }
+                var rulesPrinted = new bool[_rules.Count];
+                firstNode.Children.ForEach(child => EpicPrint(child, rulesPrinted));
             }
             else
                 Console.WriteLine("Unsuccess");
         }
-
+        
+        private void EpicPrint(BackwardNode node, bool[] rulesPrinted) {            
+            if (node.Fact != null) // If this is Fact 'OR' node
+            {
+                if (node.Children.Count != 0)
+                    EpicPrint(node.Children.Aggregate((curMin, x) =>
+                        x.Depth < curMin.Depth ? x : curMin), rulesPrinted);
+            }
+            else // If this is Rule 'AND' node
+            {
+                if (rulesPrinted[node.Rule.Id])
+                    return;
+                rulesPrinted[node.Rule.Id] = true;
+                foreach (var child in node.Children)
+                    EpicPrint(child, rulesPrinted);
+                Console.WriteLine(node.Rule);
+            }
+        }
+        
         private void RiseToRoot(BackwardNode node)
         {
-            if (node == null)
+            if (node == null || node.UnsuccessfulChildrenCount != 0)
                 return;
+            node.Depth = node.Fact != null ? 
+                node.Children.Min(child => child.Depth) :
+                node.Children.Max(child => child.Depth) + 1;
+            if (node.Depth < 0 || node.Depth > 1000)
+                Console.Write("");
             foreach (var parent in node.Parents)
             {
-                if (parent == node)
-                    return;
-                if (parent.UnsuccessfulChildrenCount > 0)
-                {
-                    parent.UnsuccessfulChildrenCount--;
-                    if (parent.UnsuccessfulChildrenCount == 0)
-                        RiseToRoot(parent);                    
-                }
+                if (parent.UnsuccessfulChildrenCount-- > 0)
+                    RiseToRoot(parent);
             }
         }
 

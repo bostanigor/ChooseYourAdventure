@@ -16,8 +16,12 @@ namespace ChooseYourAdventure
             //     new string[] { "Темный лес"});
             
             prodSystem.BackwardSearch(
-                new string[] { "Оружие", "Щит", "Удача", "Вода" },
-                new string[] { "Темный лес"});
+                new string[] { "Оружие", "Щит", "Удача", "Карта", "Вода" },
+                new string[] { "Вино"});
+            
+            // prodSystem.BackwardSearchUnoptimized(
+            //     new string[] { "Оружие", "Щит", "Удача", "Карта", "Вода" },
+            //     new string[] { "Вино"});
             
             // prodSystem.ForwardSearchSandbox(
             //     new string[] { "Оружие", "Щит", "Карта" });
